@@ -31,7 +31,7 @@ def PartnerCollisionCheck(traj1,traj2,thr1,thr2) :
 
 
 
-def PomdpFollower(x1,x2,dt,traj_duration,weight,agentID,H,theta_hat,view_thr,thr,p1_goal,p2_goal,sm,v,ww,wc,wd,costmap,costmap0s,cthr,cres):
+def PomdpFollower(x1,x2,dt,traj_duration,weight,agentID,H,theta_hat,view_thr,thr,p1_goal,p2_goal,sm,v,ww,wc,wd,costmap,costmap0s,cthr,cres,rr,r_m2o,t_m2o,wh):
     path_robot = []
     path_fScore = []
     path_intent = []
@@ -69,7 +69,7 @@ def PomdpFollower(x1,x2,dt,traj_duration,weight,agentID,H,theta_hat,view_thr,thr
     cn_node.append(initial_node)
     current = initial_node
 
-    min_dist = sm-0.1
+    min_dist = 0.6
     min_vel = 0.3
 
     x_rob = initial_node.x_rob
@@ -82,26 +82,34 @@ def PomdpFollower(x1,x2,dt,traj_duration,weight,agentID,H,theta_hat,view_thr,thr
         agentID_=1
 
     belief_num = len(theta)
+    r_path_found = []
+    r_x = []
+    r_y = []
+    r_x_ = []
+    r_y_ = []
+    rob_s_angz = []
+
     rollout_path_found = []
     rollout_x = []
     rollout_x_ = []
     rollout_y = []
     rollout_y_ = []
     robot_s_angz = []
+    
     fk_path_found = 1
 
     for i in range(belief_num):
         if theta[i]>thr:
-            r_path_found, r_x, r_y, r_x_, r_y_, rob_s_angz, path_fScore, current_ = FullKnowledgeCollaborativePlanner(x_ped,x_rob,dt,traj_duration,weight,agentID_,H,p1_goal[i],p2_goal[i],sm,v,ww,costmap,costmap0s,cthr,cres)
+            r_path_found, r_x, r_y, r_x_, r_y_, rob_s_angz, path_fScore, current_ = FullKnowledgeCollaborativePlanner(x_ped,x_rob,dt,traj_duration,weight,agentID_,H,p1_goal[i],p2_goal[i],sm,v,ww,costmap,costmap0s,cthr,cres,rr,r_m2o,t_m2o)
             if not r_path_found :
                 fk_path_found = 0
 
-            rollout_path_found.append(r_path_found)
-            rollout_x.append(r_x)
-            rollout_x_.append(r_x_)
-            rollout_y.append(r_y)
-            rollout_y_.append(r_y_)
-            robot_s_angz.append(rob_s_angz)
+        rollout_path_found.append(r_path_found)
+        rollout_x.append(r_x)
+        rollout_x_.append(r_x_)
+        rollout_y.append(r_y)
+        rollout_y_.append(r_y_)
+        robot_s_angz.append(rob_s_angz)
 
     while len(openSet)>0 and fk_path_found:
         current_fScores = [fScore[j] for j in openSet]
@@ -113,10 +121,15 @@ def PomdpFollower(x1,x2,dt,traj_duration,weight,agentID,H,theta_hat,view_thr,thr
 
         current = totalNodes[current_node_id]
 
-        if (current.start_time > traj_duration*H+0.1) or (rob_hScore<1.0):
+        if (current.end_time > traj_duration*H) or (rob_hScore<1.0):
            pathx, pathy, pathx_, pathy_, rob_s_angz, path_intent = ReconstructPathFromNode(cameFrom,current_node_id,totalNodes,agentID)
            path_found = True
            path_fScore = min_fScore
+           pathx_ = r_x
+           pathy_ = r_y
+           #print 'rob_s_angz = {}'.format(rob_s_angz)
+           #print 'rob_hScore = {}'.format(rob_hScore)
+           print 'pomdp path vel = {}'.format(np.sqrt((pathx[0]-pathx[1])**2+(pathy[0]-pathy[1])**2)/dt)
            break
 
         if current_node_id in openSet :
@@ -134,10 +147,10 @@ def PomdpFollower(x1,x2,dt,traj_duration,weight,agentID,H,theta_hat,view_thr,thr
         num_ti = [i for i in range(len(theta)) if theta[i]>thr]
 
         ang_num = 1
-        sp_num = 0
+        sp_num = 1
         H_ = max(1,H-2)
 
-        if current.start_time < (traj_duration*H_):
+        if current.end_time< (traj_duration*H_):
           sp_num=1
         #print 'agent id = {}'.format(agentID)
         neighbors = NavigationActionSampling(current,dt,traj_duration,agentID,v,sm,p1_goal,p2_goal,ang_num,sp_num,len(num_ti))
@@ -160,6 +173,7 @@ def PomdpFollower(x1,x2,dt,traj_duration,weight,agentID,H,theta_hat,view_thr,thr
 
         for j in num_ti :
             #print 'len rollout[j] = {}'.format(len(rollout_x[j]))
+            #print 'start index = {}, end index = {}'.format(start_ind,start_ind+num_traj)
             RolloutX.append([rollout_x[j][k] for k in range(start_ind,start_ind+num_traj,1)])
             RolloutX_.append([rollout_x_[j][k] for k in range(start_ind,start_ind+num_traj,1)])
             RolloutY.append([rollout_y[j][k] for k in range(start_ind,start_ind+num_traj,1)])
@@ -175,6 +189,7 @@ def PomdpFollower(x1,x2,dt,traj_duration,weight,agentID,H,theta_hat,view_thr,thr
             traj = [] 
             vel = [] #agent velocity
             x = [] # agent position
+            #print 'robot velocity = {}'.format(cn_node[0].robot_velx[-1]**2+cn_node[0].robot_vely[-1]**2)
             if agentID==1 :
                 traj.append([cn_node[0].human_trajx[j] for j in range(num_traj)])
                 traj.append([cn_node[0].human_trajy[j] for j in range(num_traj)])
@@ -195,12 +210,18 @@ def PomdpFollower(x1,x2,dt,traj_duration,weight,agentID,H,theta_hat,view_thr,thr
                 vel.append(cn_node[0].x_rob[3])
                 x = [cn_node[0].x_rob[0],cn_node[0].x_rob[1]]
 
-            collision1 = Check(cn_node[0].robot_trajx,cn_node[0].robot_trajy,costmap,costmap0s,cthr,cres)
+            #collision1 = Check(cn_node[0].robot_trajx,cn_node[0].robot_trajy,costmap,costmap0s,cthr,cres,rr,r_m2o,t_m2o)
+            collision1 = Check(cn_node[0].robot_trajx,cn_node[0].robot_trajy,costmap,costmap0s,cthr,cres,rr)
+            
             collision2 = PartnerCollisionCheck(Rollout,traj,min_dist-0.02,min_vel)
             if collision1 or collision2 :
                 #print 'collision 1,2 = {}{}'.format(collision1,collision2)
+                #print 'Rollout = {}'.format(Rollout)
+                #rint 'traj = {}'.format(traj)
+
                 continue
             #print 'RolloutX_ = {}'.format(RolloutX_)
+            #print 'vel = {}'.format(vel)
             wdist = 0.0
             x_ = [] #partner state
             x__ = [] #agent state appended
@@ -260,23 +281,27 @@ def PomdpFollower(x1,x2,dt,traj_duration,weight,agentID,H,theta_hat,view_thr,thr
                         s_new = np.multiply(obs_s,s)
                         theta = [k/o for k in s_new]
 
-                cn_node[j].theta_new = theta
-                cn_node[j].gScore_ = gScore_new
+                cn_ind = num_ti.index(j)
+                cn_node[cn_ind].theta_new = theta
+                cn_node[cn_ind].gScore_ = gScore_new
                 #cost_to_go using the updated theta
-                ped_dtgo = [np.sqrt((p1_goal[k][0]-x_ped_[k][0])**2+(p1_goal[k][1]-x_ped_[k][1])**2)*theta[k]/v for k in range(len(x_ped_)) ]
+                #print 'p1_goal and ped_pos = {},{}'.format(p1_goal,x_ped_)
+                #print 'p2_goal and rob_pos = {},{}'.format(p2_goal,x_rob_)
+
+                ped_dtgo = [np.sqrt((p1_goal[num_ti[k]][0]-x_ped_[k][0])**2+(p1_goal[num_ti[k]][1]-x_ped_[k][1])**2)*theta[num_ti[k]]/v for k in range(len(x_ped_)) ]
                 ped_hScore = np.sum(ped_dtgo)
-                rob_dtgo = [np.sqrt((p2_goal[k][0]-x_rob_[k][0])**2+(p2_goal[k][1]-x_rob_[k][1])**2)*theta[k]/v for k in range(len(x_rob_)) ]
+                rob_dtgo = [np.sqrt((p2_goal[num_ti[k]][0]-x_rob_[k][0])**2+(p2_goal[num_ti[k]][1]-x_rob_[k][1])**2)*theta[num_ti[k]]/v for k in range(len(x_rob_)) ]
                 rob_hScore = np.sum(rob_dtgo)
                 hScore = np.dot(weight,[rob_hScore,ped_hScore])
                 gScore.append(gScoreNew)
                 gScore_.append(gScore_new)
-                fScore_.append(np.add(gScore_new,[weight[0]*rob_hScore,weight[1]*ped_hScore])) 
-                fScore.append(gScoreNew+hScore+np.random.normal()*0.01)
+                fScore_.append(np.add(gScore_new,[wh*weight[0]*rob_hScore,wh*weight[1]*ped_hScore])) 
+                fScore.append(gScoreNew+wh*hScore+np.random.normal()*0.01)
 
                 #cost-to-go
                 cameFrom.append(current_node_id)
                 openSet.append(len(totalNodes))
-                totalNodes.append(cn_node[j])
+                totalNodes.append(cn_node[cn_ind])
 
             if (len(totalNodes)-len(openSet))>400 :
                 print 'gScore_ = {}'.format(gScore_[-1])

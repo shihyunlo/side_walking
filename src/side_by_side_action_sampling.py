@@ -47,8 +47,10 @@ def SideBySideActionSampling(parent,dt,traj_duration,agentID,v,sm,p1_goal,p2_goa
             vy_ind = 3
             #vTravellerx = pos[2]
             #vTravellery = pos[3]
-            vTx = p1_goal[0]-pos[0]
-            vTy = p1_goal[1]-pos[1]
+            #vTx = p1_goal[0]-pos[0]
+            #vTy = p1_goal[1]-pos[1]
+            vTx = parent.x_ped[2]
+            vTy = parent.x_ped[3]
 
         else :
             pos = [init_x_rob,init_y_rob]
@@ -57,9 +59,12 @@ def SideBySideActionSampling(parent,dt,traj_duration,agentID,v,sm,p1_goal,p2_goa
             vy_ind = 6
             #vTravellerx = pos[2]
             #vTravellery = pos[3]
-            vTx = p2_goal[0]-pos[0]
-            vTy = p2_goal[1]-pos[1]
-            
+            #vTx = p2_goal[0]-pos[0]
+            #vTy = p2_goal[1]-pos[1]
+            vTx = parent.x_rob[2]
+            vTy = parent.x_rob[3]
+
+        #print 'x_rob full = {},{}'.format(parent.x_rob[2],parent.x_rob[3])
         #v = np.sqrt(parent.x_ped[2]**2+parent.x_ped[3]**2)
         vTx_ = vTx/np.sqrt(vTx**2+vTy**2)*(v+dv)
         vTy_ = vTy/np.sqrt(vTx**2+vTy**2)*(v+dv)

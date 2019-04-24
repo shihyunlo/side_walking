@@ -3,10 +3,11 @@ import math as m
 import sys
 sys.path.append('/home/siml/catkin_ws/src/side_walking/src')
 from nodes import Nodes
+import matplotlib.pyplot as plt
 
 def NavigationActionSampling(parent,dt,traj_duration,agentID,v,sm,p1_goal,p2_goal,ang_num,sp_num,num_obs):
     t = np.dot(range(0,int(traj_duration/dt)),dt)
-    ang_del = 32.5/360*np.pi
+    ang_del = 37.5/360*np.pi
     sp_del = 0.4
 
     count = 0
@@ -20,11 +21,19 @@ def NavigationActionSampling(parent,dt,traj_duration,agentID,v,sm,p1_goal,p2_goa
     ang_sampled = ang_mesh.reshape(1,len(dv_)*len(ang_accel_))
 
 
+    #plt.cla()
+    #plt.axis('equal')
+
+    #plt.grid(True)
+    #plt.autoscale(False)
+
+
 
     #print 'len(dv_), len(ang_accel_) = {},{}'.format(len(dv_),len(ang_accel_))
     for i in range(len(dv_)*len(ang_accel_)):
         action = Nodes(parent,parent.end_time,parent.end_time+traj_duration,[],[],[],parent.theta_new)
         dv = dv_sampled[0][i]
+        #print 'dv = {}'.format(dv)
         ang_accel = ang_sampled[0][i]
         count = count + 1
         #initialization
@@ -38,6 +47,8 @@ def NavigationActionSampling(parent,dt,traj_duration,agentID,v,sm,p1_goal,p2_goa
             #vTravellery = pos[3]
             vTx = p1_goal[0][0]-pos[0]
             vTy = p1_goal[0][1]-pos[1]
+            vTx = parent.x_ped[2]
+            vTy = parent.x_ped[3]
         else :
             init_x_rob = parent.x_rob[0]
             init_y_rob = parent.x_rob[1]
@@ -48,8 +59,10 @@ def NavigationActionSampling(parent,dt,traj_duration,agentID,v,sm,p1_goal,p2_goa
             #vTravellery = pos[6]
             vTx = p2_goal[0][0]-pos[0]
             vTy = p2_goal[0][1]-pos[1]
+            vTx = parent.x_rob[2]
+            vTy = parent.x_rob[3]
 
-
+        #print 'x_rob = {},{}'.format(parent.x_rob[2],parent.x_rob[3])
         vTx_ = vTx/np.sqrt(vTx**2+vTy**2)*(v+dv)
         vTy_ = vTy/np.sqrt(vTx**2+vTy**2)*(v+dv)
         trajx = []
@@ -59,11 +72,17 @@ def NavigationActionSampling(parent,dt,traj_duration,agentID,v,sm,p1_goal,p2_goa
         velx = np.dot(vTx_,np.cos(np.dot(t,ang_accel))) + np.dot(vTy_,np.sin(np.dot(t,ang_accel)))
         vely = -np.dot(vTx_,np.sin(np.dot(t,ang_accel))) + np.dot(vTy_,np.cos(np.dot(t,ang_accel)))
 
+
+
         for j in range(0,len(t)):
-            pos[0] = pos[0] + velx[j]
-            pos[1] = pos[1] + vely[j]
+            pos[0] = pos[0] + velx[j]*dt
+            pos[1] = pos[1] + vely[j]*dt
             trajx.append(pos[0])
             trajy.append(pos[1])
+
+            #plt.plot(pos[0],pos[1],'ok')
+
+            
 
         time = np.add(t,parent.end_time)
         action.trajt = time
@@ -98,14 +117,16 @@ def NavigationActionSampling(parent,dt,traj_duration,agentID,v,sm,p1_goal,p2_goa
             x_rob_.append(vely[-1])
             action.x_rob = x_rob_
 
-
         Actions.append(action)
 
 
     Actions_ = []
+
     for i in range(max(num_obs,1)):
         Actions_.append(Actions)
     #print 'Actions_[0][0].rob_pos = {}'
+
+    plt.pause(0.01)
     return Actions_
 
 

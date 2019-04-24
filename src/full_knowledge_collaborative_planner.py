@@ -8,7 +8,7 @@ from check import Check
 from side_by_side_action_sampling import SideBySideActionSampling
 from reconstruct_path_from_node import ReconstructPathFromNode
 
-def FullKnowledgeCollaborativePlanner(x1,x2,dt,traj_duration,weight,agentID,H,p1_goal,p2_goal,sm,v,ww,costmap,costmap0s,cthr,cres):
+def FullKnowledgeCollaborativePlanner(x1,x2,dt,traj_duration,weight,agentID,H,p1_goal,p2_goal,sm,v,ww,costmap,costmap0s,cthr,cres,rr,r_m2o,t_m2o):
     path_robot = []
     path_fScore = []
     path_intent = []
@@ -67,8 +67,9 @@ def FullKnowledgeCollaborativePlanner(x1,x2,dt,traj_duration,weight,agentID,H,p1
 
 
 
-        if (current.start_time > (traj_duration*H+0.1)) or (rob_hScore<1.0):
+        if (current.end_time > (traj_duration*H)) or (rob_hScore<1.0):
             pathx, pathy, pathx_, pathy_, rob_s_angz, path_intent = ReconstructPathFromNode(cameFrom,current_node_id,totalNodes,agentID)
+            #print 'path vel = {}'.format(np.sqrt((pathx[0]-pathx[1])**2+(pathy[0]-pathy[1])**2)/dt)
             path_found = True
             path_fScore = min_fScore
             #print 'path found'
@@ -96,8 +97,11 @@ def FullKnowledgeCollaborativePlanner(x1,x2,dt,traj_duration,weight,agentID,H,p1
             #collision1 = CollisionCheck([cn_node.human_trajx,cn_node.human_trajy],[cn_node.robot_trajx,cn_node.robot_trajy],min_dist-0.02,min_vel)
             #collision2 = MapCollisionCheck(cn_node)
             # TODO
-            collision1 = Check(cn_node.robot_trajx,cn_node.robot_trajy,costmap,costmap0s,cthr,cres)
-            collision2 = 0
+            collision1 = Check(cn_node.robot_trajx,cn_node.robot_trajy,costmap,costmap0s,cthr,cres,rr)
+
+            #collision1 = Check(cn_node.robot_trajx,cn_node.robot_trajy,costmap,costmap0s,cthr,cres,rr,r_m2o,t_m2o)
+            
+            collision2 = Check(cn_node.human_trajx,cn_node.human_trajy,costmap,costmap0s,cthr,cres,rr)
             if collision1 or collision2 :
                 continue
 
@@ -126,10 +130,10 @@ def FullKnowledgeCollaborativePlanner(x1,x2,dt,traj_duration,weight,agentID,H,p1
             pRx = x_rob_[0]
             pRy = x_rob_[1]
 
-            ped_del = np.add([pHx,pHy],[-p1_goal[0],-p1_goal[1]])
-            rob_del = np.add([pRx,pRy],[-p2_goal[0],-p2_goal[1]])
-            ped_hScore = np.sqrt(np.dot(ped_del,ped_del))/v
-            rob_hScore = np.sqrt(np.dot(rob_del,rob_del))/v
+            ped_del = np.add([pHx+x_ped_[2]*traj_duration,pHy+x_ped_[3]*traj_duration],[-p1_goal[0],-p1_goal[1]])
+            rob_del = np.add([pRx+x_rob_[2]*traj_duration,pRy+x_rob_[3]*traj_duration],[-p2_goal[0],-p2_goal[1]])
+            ped_hScore = (np.sqrt(np.dot(ped_del,ped_del))+human_vel*traj_duration)/v
+            rob_hScore = (np.sqrt(np.dot(rob_del,rob_del))+np.sqrt(x_rob_[2]**2+x_rob_[3]**2)*traj_duration)/v
             hScore = np.dot(weight,[rob_hScore,ped_hScore])
             fScore.append(gScore[-1]+hScore)
             openSet.append(cn_node_id)
