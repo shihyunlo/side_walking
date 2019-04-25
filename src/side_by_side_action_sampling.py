@@ -165,6 +165,94 @@ def SideBySideActionSampling(parent,dt,traj_duration,agentID,v,sm,p1_goal,p2_goa
 
            
         Actions.append(action)
+
+
+    #rotating actions
+    ang_del = [np.pi/1.3, -np.pi/1.3]
+    for ang in ang_del :
+        action = Nodes(parent,parent.end_time,parent.end_time+traj_duration,[],[],[],[],parent.theta_new)
+
+        if (agentID==1):
+            pos = [init_x_ped,init_y_ped]
+            pos_ = [init_x_rob,init_y_rob]
+            vTx = parent.x_ped[2]
+            vTy = parent.x_ped[3]
+
+        else :
+            pos = [init_x_rob,init_y_rob]
+            pos_ = [init_x_ped,init_y_ped]
+            vTx = parent.x_rob[2]
+            vTy = parent.x_rob[3]
+
+
+        vTx_ = (vTx*np.cos(ang)-vTy*np.sin(ang))/np.sqrt(vTx**2+vTy**2)*0.02
+        vTy_ = (vTx*np.sin(ang)+vTy*np.cos(ang))/np.sqrt(vTx**2+vTy**2)*0.02
+
+        velx = np.dot(t,vTx_)
+        vely = np.dot(t,vTy_)
+        trajx = [vTx_*dt*i for i in range(0,len(t))]
+        trajy = [vTy_*dt*i for i in range(0,len(t))]
+        s_ = np.cross([vTx_,vTy_],np.add([pos_[0],pos_[1]],[-pos[0],-pos[1]]))
+        the_ = np.sign(s_)*np.pi/2
+        trayx_ = np.add(trajx,np.dot([np.cos(the_),-np.sin(the_)],[vTx_,vTy_])*sm)
+        trayy_ = np.add(trajy,np.dot([np.sin(the_),np.cos(the_)],[vTx_,vTy_])*sm)
+        time = np.add(t,parent.end_time+dt)
+        action.trajt = time
+        action.intent = -1
+
+        if agentID==1 :
+            action.human_trajx = trajx
+            action.human_trajy = trajy
+            action.human_velx = velx
+            action.human_vely = vely
+            action.robot_trajx = trajx_
+            action.robot_trajy = trajy_
+            action.robot_velx = velx
+            action.robot_vely = vely
+            x_ped_ = []
+            x_ped_.append(trajx[-1])
+            x_ped_.append(trajy[-1])
+            x_ped_.append(velx[-1])
+            x_ped_.append(vely[-1])
+            x_rob_ = []
+            x_rob_.append(trajx_[0])
+            x_rob_.append(trajy_[1])
+            x_rob_.append(velx[-1])
+            x_rob_.append(vely[-1])
+            action.x_rob = x_rob_
+            action.x_ped = x_ped_  
+            action.robot_angz = [ang for k in range(len(t))]            
+
+
+        else :
+            action.robot_trajx = trajx
+            action.robot_trajy = trajy
+            action.robot_velx = velx
+            action.robot_vely = vely
+            action.human_trajx = trajx_
+            action.human_trajy = trajy_
+            action.human_velx = velx
+            action.human_vely = vely
+            x_ped_ = []
+            x_ped_.append(trajx_[0])
+            x_ped_.append(trajy_[1])
+            x_ped_.append(velx[-1])
+            x_ped_.append(vely[-1])
+            x_rob_ = []
+            x_rob_.append(trajx[0])
+            x_rob_.append(trajy[1])
+            x_rob_.append(velx[-1])
+            x_rob_.append(vely[-1])
+            action.x_rob = x_rob_
+            action.x_ped = x_ped_           
+            action.robot_angz = [ang for k in range(len(t))] 
+
+        #print 'x_ped = {}'.format(action.x_ped)
+
+        Actions.append(action)
+
+
+
     return Actions
 
 

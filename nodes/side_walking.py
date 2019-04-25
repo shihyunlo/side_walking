@@ -69,8 +69,8 @@ class SideWalking :
     	self.ww = 0.0
     	self.wc = 0.1
     	self.wd = [0,0]
-    	self.wd[0] = 1.0
-    	self.wd[1] = 1.0
+    	self.wd[0] = 2.0
+    	self.wd[1] = 2.0
     	self.theta = prior
         self.view_thr = -1
         self.prob_thr = 0.15
@@ -142,6 +142,8 @@ class SideWalking :
         self.Ytraj = []
         self.Xvel = []
         self.Yvel = []
+        self.iXtraj = [[],[]]
+        self.iYtraj = [[],[]]
         self.x_pos_ref = 0.0
         self.y_pos_ref = 0.0
         self.x_vel_ref = 0.0
@@ -359,6 +361,12 @@ class SideWalking :
         rob_intersection_reached = 0
         ped_intersection_reached = 0
 
+        i_trajx = [[],[]]
+        i_trajy = [[],[]]
+        i_trajx_ = [[],[]]
+        i_trajy_ = [[],[]]
+        i_path_found = [0,0]
+
         
 
 
@@ -518,8 +526,9 @@ class SideWalking :
                     self.ped_vel[0] = (1-alpha)*self.ped_vel[0]+alpha*new_ped_vel[0]
                     self.ped_vel[1] = (1-alpha)*self.ped_vel[1]+alpha*new_ped_vel[1]
                     self.v = np.sqrt(self.ped_vel[0]**2+self.ped_vel[1]**2)
-                    self.v = min(self.v,1.0)
-                    self.v = 0.5
+                    self.v = min(self.v,1.4)
+                    self.v = max(self.v,0.5)
+                    #self.v = 0.5
                     #print 'self.v ={}'.format(self.v)
                     rel_dist = np.sqrt(self.ped_rel_pos[0]**2+self.ped_rel_pos[1]**2)
                     if rel_dist < 2.5:
@@ -561,13 +570,91 @@ class SideWalking :
                             rob_intersection_reached = 1
 
 
-                        if not ped_intersection_reached and ped_intersect_dist<3.5 :
+                        if not ped_intersection_reached and ped_intersect_dist<2.5 :
                             print 'Ped reached intersection, d = {}'.format(ped_intersect_dist)
                             ped_intersection_reached = 1
-                            initial_inference_time = initial_time
+                            initial_inference_time = current_time
                         
 
-                        
+
+                        #inference
+                        if ped_intersection_reached:
+                                                        #traj rollout for inference update
+                            agentID = 1
+                            num_ti = [i for i in range(len(self.theta)) if self.theta[i]>self.prob_thr]
+                            if len(num_ti) <len(self.theta) :
+                                #TO DO: regulate
+                                self.theta = [0,0]
+                                self.theta[num_ti[0]] = 1.0
+                            
+                            if max(self.theta)<1.0:
+                                #inference update
+                                inference_v = max(self.v,0.5)                               
+                                num_i_path_found = 0
+                                for i in range(len(self.theta)) :
+                                    p1_goal = self.p1_goal[i]
+                                    p2_goal = self.p2_goal[i]
+                                    i_path_found[i], i_trajx[i], i_trajy[i], i_trajx_[i], i_trajy_[i], rob_s_angz, path_fScore, current = FullKnowledgeCollaborativePlanner(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,p1_goal,p2_goal,self.sm,inference_v,self.ww,self.map_costmap,self.map_costmap0s,collision_thr,self.map_costmap_res,self.map_costmap_rr,self.r_m2o,self.t_m2o)
+                                    num_i_path_found = num_i_path_found+i_path_found[i]
+
+                                inference_time_del = current_time-initial_inference_time
+                                obs_index = int(inference_time_del/self.dt)
+
+                                o = 0.0
+                                s = self.theta
+                                obs_s = [np.Inf for i in range(len(self.theta))]
+                                s_new_no = [np.Inf for i in range(len(self.theta))]
+                                inference_update = 1
+                                
+
+                                if (num_i_path_found>0) and (num_i_path_found<len(self.theta)):
+                                    obs_s = [0.1 for i in range(len(s_new_no))]
+                                    obs_s[i_path_found.index(1)] = 0.9
+                                    o = np.dot(s,obs_s)
+                                
+                                elif (len(self.iXtraj[0]) > 0) and (len(self.iXtraj[1]) > 0) and (len(self.iXtraj[0])>=obs_index):
+                                    dist = [np.Inf for i in range(len(self.theta))]                                    
+                                    obs = self.ped_pos
+
+                                    #print 'len iYtraj = {}'.format(len(self.iXtraj[0]))
+
+                                    #print 'len iYtraj = {}'.format(len(self.iXtraj[1]))
+                                    #print 'len iYtraj = {}'.format(len(self.iYtraj[0]))
+
+                                    #print 'len iYtraj = {}'.format(len(self.iYtraj[1]))
+
+                                    dist = [np.sqrt((self.iXtraj[i][obs_index]-obs[0])**2+(self.iYtraj[i][obs_index]-obs[1])**2) for i in range(len(self.theta))]
+                                    obs_s = [np.exp(-dist[i]*self.wd[i]) for i in range(len(self.theta))]
+                                    min_dist1 = dist.index(min(dist))
+                                    if min_dist1==0:
+                                        min_dist2 = 1
+                                    else:
+                                        min_dist2 = 0
+                                        obs_s[min_dist1] = 1-obs_s[min_dist2]
+
+                                    s_new_no = [s[i]*obs_s[i] for i in range(len(self.theta))]
+                                    o = sum(s_new_no)
+                                    #print 'inference dist = {}'.format(dist)
+                                else:
+                                    inference_update = 0
+
+                                if inference_update :
+                                    self.theta = [s_new_no[i]/o for i in range(len(self.theta))]
+                                
+                                    print 'inference obs_s = {}'.format(obs_s)
+                                    #print 'inference obs = {}'.format(s_new_no)
+                                    print 'THETA = {}'.format(self.theta)
+
+                                if num_i_path_found==len(self.theta) :
+                                    self.iXtraj = i_trajx
+                                    self.iYtraj = i_trajy
+                                    initial_inference_time = current_time
+                                    #print 'inference path updated, length = {}'.format(len(self.iXtraj[0]))
+
+
+
+
+                                
 
 
 
@@ -579,18 +666,18 @@ class SideWalking :
 
                         if not rob_intersection_reached :
                             agentID=1
-                            print 'default planner called'
+                            #print 'default planner called'
                             goal_ind = 0
                             p1_goal = self.p1_goal[goal_ind]
                             p2_goal = self.p2_goal[goal_ind]
                             stime = time.time()
-                            robot_path_found, xtraj, ytraj, pathx_, pathy_, rob_s_angz, path_fScore, current = FullKnowledgeCollaborativePlanner(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,p1_goal,p2_goal,self.sm,self.v,self.ww,self.map_costmap,self.map_costmap0s,collision_thr,self.map_costmap_res,self.map_costmap_rr,self.r_m2o,self.t_m2o)
+                            robot_path_found, pathx_, pathy_, xtraj, ytraj, rob_s_angz, path_fScore, current = FullKnowledgeCollaborativePlanner(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,p1_goal,p2_goal,self.sm,self.v,self.ww,self.map_costmap,self.map_costmap0s,collision_thr,self.map_costmap_res,self.map_costmap_rr,self.r_m2o,self.t_m2o)
                             time_del = time.time()-stime
                             #print 'full- planner computation time = {}'.format(time_del)
-                            self.Xtraj = np.copy(pathx_)
-                            self.Ytraj = np.copy(pathy_)
-                            human_trajx = xtraj
-                            human_trajy = ytraj
+                            #self.Xtraj = np.copy(pathx_)
+                            #self.Ytraj = np.copy(pathy_)
+                            #human_trajx = xtraj
+                            #human_trajy = ytraj
                             #print 'full traj length = {}'.format(len(pathx_))
                             #print 'full traj length = {}'.format(len(xtraj))
 
@@ -611,38 +698,35 @@ class SideWalking :
 
                             if self.planner=='Full' :
                                 agentID=1
-                                print 'full planner called'
-                                #p1_goal = self.ped_pos
-                                #p2_goal = self.ped_pos
+                                #print 'full planner called'
+                                ##p1_goal = self.ped_pos
+                                ##p2_goal = self.ped_pos
                                 goal_ind = self.theta.index(max(self.theta))
                                 p1_goal = self.p1_goal[goal_ind]
                                 p2_goal = self.p2_goal[goal_ind]
                                 stime = time.time()
-                                robot_path_found, xtraj, ytraj, pathx_, pathy_, rob_s_angz, path_fScore, current = FullKnowledgeCollaborativePlanner(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,p1_goal,p2_goal,self.sm,self.v,self.ww,self.map_costmap,self.map_costmap0s,collision_thr,self.map_costmap_res,self.map_costmap_rr,self.r_m2o,self.t_m2o)
+                                robot_path_found, pathx_, pathy_, xtraj, ytraj, rob_s_angz, path_fScore, current = FullKnowledgeCollaborativePlanner(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,p1_goal,p2_goal,self.sm,self.v,self.ww,self.map_costmap,self.map_costmap0s,collision_thr,self.map_costmap_res,self.map_costmap_rr,self.r_m2o,self.t_m2o)
                                 time_del = time.time()-stime
-                                print 'full- planner computation time = {}'.format(time_del)
-                                self.Xtraj = np.copy(pathx_)
-                                self.Ytraj = np.copy(pathy_)
-                                human_trajx = xtraj
-                                human_trajy = ytraj
+                                #print 'full- planner computation time = {}'.format(time_del)
                                 
                             elif self.planner== 'Pomdp' :
                                 agentID=2
-                                print 'pomdp called'
+                                #print 'pomdp called'
                                 stime = time.time()
                                 robot_path_found, xtraj, ytraj, pathx_, pathy_, rob_s_angz, path_fScore, current = PomdpFollower(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,self.theta,self.view_thr,self.prob_thr,self.p1_goal,self.p2_goal,self.sm,self.v,self.ww,self.wc,self.wd,self.map_costmap,self.map_costmap0s,collision_thr,self.map_costmap_res,self.map_costmap_rr,self.r_m2o,self.t_m2o,self.wh)
                                 time_del = time.time()-stime
                                 print 'pomdp computation time = {}'.format(time_del)
-                                self.Xtraj = xtraj
-                                self.Ytraj = ytraj
-                                human_trajx = pathx_
-                                human_trajy = pathy_
+                                
                                 #if robot_path_found:
                             
                                 #else :
                                 #    print 'pomdp plan not found'
 
                         if robot_path_found :
+                            self.Xtraj = xtraj
+                            self.Ytraj = ytraj
+                            human_trajx = pathx_
+                            human_trajy = pathy_
                             x1 = x1_
                             x2 = x2_
                             robot_time_del_plan = 0
@@ -749,6 +833,7 @@ class SideWalking :
 
             plt.plot(self.ped_pos[0],self.ped_pos[1],'or')
             plt.plot(self.rob_pos[0],self.rob_pos[1],'og')
+            #print 'sm = {}'.format(self.sm)
 
 
             #px, py = Map2Odom([self.ped_pos[0]],[self.ped_pos[1]],self.r_m2o,self.t_m2o)
@@ -760,9 +845,13 @@ class SideWalking :
             plt.plot(self.p1_goal[1][0],self.p1_goal[1][1],'*g')
             #print 'goal location = {}'.format(self.p1_goal)
 
+            if len(self.iXtraj[0])>0:
+                plt.plot(self.iXtraj[0],self.iYtraj[0],'m')
+                plt.plot(self.iXtraj[1],self.iYtraj[1],'m')
+
                     
 
-            plt.pause(0.05)            
+            plt.pause(0.02)            
             #plt.plot(cn_node.human_trajy,cn_node.human_trajy,'*g')
     	    #plt.plot(self.p1_goal[0],self.p1_goal[1],'ok')
     	    #plt.plot(self.p2_goal[0],self.p2_goal[1],'om')

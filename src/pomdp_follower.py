@@ -129,7 +129,7 @@ def PomdpFollower(x1,x2,dt,traj_duration,weight,agentID,H,theta_hat,view_thr,thr
            pathy_ = r_y
            #print 'rob_s_angz = {}'.format(rob_s_angz)
            #print 'rob_hScore = {}'.format(rob_hScore)
-           print 'pomdp path vel = {}'.format(np.sqrt((pathx[0]-pathx[1])**2+(pathy[0]-pathy[1])**2)/dt)
+           #print 'pomdp path vel = {}'.format(np.sqrt((pathx[0]-pathx[1])**2+(pathy[0]-pathy[1])**2)/dt)
            break
 
         if current_node_id in openSet :
@@ -315,8 +315,8 @@ def PomdpFollower(x1,x2,dt,traj_duration,weight,agentID,H,theta_hat,view_thr,thr
         print 'total node length = {}'.format(len(totalNodes)) 
         print 'cn_node end time = {}'.format(cn_node[0].end_time)
         print 'current node time = {}'.format(current.end_time)
-    else:
-        print 'total node length = {}'.format(len(totalNodes))       
+    #else:
+    #    print 'total node length = {}'.format(len(totalNodes))       
 
 
 

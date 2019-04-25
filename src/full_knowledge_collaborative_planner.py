@@ -58,6 +58,8 @@ def FullKnowledgeCollaborativePlanner(x1,x2,dt,traj_duration,weight,agentID,H,p1
             break
 
         current = totalNodes[current_node_id]
+        #if current.intent ==-1:
+        #    print 'current velocity = {}'.format(current.x_ped)
         #print 'cn_node_id = {}'.format(current_node_id)
         #print 'cn node x_rob = {}'.format(current.x_rob)
         #print 'cn_node x_ped = {}'.format(current.x_ped)
@@ -94,6 +96,8 @@ def FullKnowledgeCollaborativePlanner(x1,x2,dt,traj_duration,weight,agentID,H,p1
         #print 'len neighbors = {}'.format(len(neighbors))
         for i in range(len(neighbors)):
             cn_node = neighbors[i]
+            #if cn_node.intent==-1:
+            #    print 'velocity = {}'.format(cn_node.x_ped)
             #collision1 = CollisionCheck([cn_node.human_trajx,cn_node.human_trajy],[cn_node.robot_trajx,cn_node.robot_trajy],min_dist-0.02,min_vel)
             #collision2 = MapCollisionCheck(cn_node)
             # TODO
