@@ -69,7 +69,7 @@ def PomdpFollower(x1,x2,dt,traj_duration,weight,agentID,H,theta_hat,view_thr,thr
     cn_node.append(initial_node)
     current = initial_node
 
-    min_dist = 0.6
+    min_dist = 0.3
     min_vel = 0.3
 
     x_rob = initial_node.x_rob

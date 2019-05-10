@@ -69,7 +69,7 @@ def FullKnowledgeCollaborativePlanner(x1,x2,dt,traj_duration,weight,agentID,H,p1
 
 
 
-        if (current.end_time > (traj_duration*H)) or (rob_hScore<1.0):
+        if (current.end_time > (traj_duration*H)) or (rob_hScore<0.2):
             pathx, pathy, pathx_, pathy_, rob_s_angz, path_intent = ReconstructPathFromNode(cameFrom,current_node_id,totalNodes,agentID)
             #print 'path vel = {}'.format(np.sqrt((pathx[0]-pathx[1])**2+(pathy[0]-pathy[1])**2)/dt)
             path_found = True

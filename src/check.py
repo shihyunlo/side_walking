@@ -16,7 +16,7 @@ def Check(trajx,trajy,costmap,costmap0s,cthr,cres,rr,r_m2o= [],t_m2o=[]):
     x0 = costmap0s[0]
     y0 = costmap0s[1]
     #rr = int(np.sqrt(len(costmap)))
-    rad = 0.2
+    rad = 0.1
     patch_size = int(rad/cres)
     patch = []
     for i in range(-patch_size,patch_size+1) :
@@ -49,6 +49,7 @@ def Check(trajx,trajy,costmap,costmap0s,cthr,cres,rr,r_m2o= [],t_m2o=[]):
         if (index+max(patch))< len(costmap) and (index+min(patch))>0 :
             collision = (costmap[index]>cthr)
             #collision = len([(costmap[index+i] >cthr) for i in patch])>0
+
             if collision :
                 break        
         

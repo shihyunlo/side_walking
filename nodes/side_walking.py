@@ -50,7 +50,7 @@ class SideWalking :
         self.sm = 1.0 #safety margin
         self.dt = 0.1 
         self.weight = [1,1]
-        self.H = 3
+        self.H = 2
         #    self.ped_helmet_id = int(sys.argv[1])
     	#    self.ped_goal_chair_id = int(sys.argv[2])
     	#    self.rob_goal_chair_id = int(sys.argv[3])
@@ -74,6 +74,7 @@ class SideWalking :
     	self.theta = prior
         self.view_thr = -1
         self.prob_thr = 0.15
+        self.collision_thr = 75
         #self.subgoals = np.full((2,2),np.Inf)
 
         #subgoals
@@ -91,6 +92,13 @@ class SideWalking :
         self.map_costmap0s = [0,0]
         self.map_costmap_res = 0.025
         self.map_costmap_rr = 0
+
+
+        self.ds_size = 16
+        self.ds_map_costmap = []
+        self.ds_map_costmap0s = [0,0]
+        self.ds_map_costmap_res = 0.025*self.ds_size
+        self.ds_map_costmap_rr = 0
 
         if self.sim :
             inters_timing = 8.5
@@ -117,7 +125,9 @@ class SideWalking :
         self.rob_vel_odom = [0.0 for i in range(2)]
         self.rob_yaw = np.Inf
         self.rob_yaw_odom = np.Inf
-        self.r_m2o = 0.0
+        self.rob_yaw_tracking = np.Inf
+        self.rob_angz = 0.0
+        self.r_m2o = np.Inf
         self.t_m2o = [0.0,0.0]
         self.R = np.zeros((2,2))
         self.R[0][0] = 1.0
@@ -215,6 +225,7 @@ class SideWalking :
             
             self.map_costmap_res = map_msg.info.resolution
             self.map_costmap_rr = map_msg.info.width
+            self.map_costmap_h = map_msg.info.height
  
 
 
@@ -228,8 +239,11 @@ class SideWalking :
             q = odom_msg.pose.pose.orientation
             self.rob_yaw_odom = m.atan2(2.0*(q.x*q.y + q.w*q.z), q.w*q.w + q.x*q.x - q.y*q.y - q.z*q.z)
             self.rob_yaw_odom = 2.0*m.acos(q.w)*np.sign(q.z)
+            #TODO: Check this:2.0? used to:1.0
             if abs(self.rob_yaw_odom)>m.pi :
-                self.rob_yaw_odom = self.rob_yaw_odom - np.sign(self.rob_yaw_odom)*m.pi
+                self.rob_yaw_odom = self.rob_yaw_odom - 2.0*np.sign(self.rob_yaw_odom)*m.pi
+            
+            self.rob_angz = odom_msg.twist.twist.angular.z
             #print 'rob_yaw_odom = {}'.format(self.rob_yaw_odom)
 
 
@@ -251,8 +265,9 @@ class SideWalking :
             q = amcl_msg.pose.pose.orientation
             self.rob_yaw = m.atan2(2.0*(q.x*q.y + q.w*q.z), q.w*q.w + q.x*q.x - q.y*q.y - q.z*q.z)
             self.rob_yaw = 2.0*m.acos(q.w)*np.sign(q.z)
+            #TODO:Check this: 2.0 used to 1.0
             if abs(self.rob_yaw)>m.pi :
-                self.rob_yaw = self.rob_yaw - np.sign(self.rob_yaw)*m.pi
+                self.rob_yaw = self.rob_yaw - 2.0*np.sign(self.rob_yaw)*m.pi
             #print 'rob_yaw = {}'.format(self.rob_yaw)
 
 
@@ -261,6 +276,8 @@ class SideWalking :
         #print 'ped callback reached id = {}'.format(len(people))
         ped_found = False 
         supp_ped_found = False
+        supp_ped_list = []
+        supp_ped_id_list = []
         supp_ped_pos = [0,0]
         supp_ped_id = np.Inf
 
@@ -313,7 +330,7 @@ class SideWalking :
 
         # Main Function
     def run(self):
-        collision_thr = 75
+        collision_thr = self.collision_thr
         human_path_found = 0
         robot_path_found = 0
         rob_traj_duration = 1.0/self.robot_replan_rate
@@ -372,9 +389,18 @@ class SideWalking :
 
         while (not rospy.is_shutdown()):
             if self.rob_yaw!=np.Inf and self.rob_yaw_odom!=np.Inf :
-                self.r_m2o = self.rob_yaw_odom - self.rob_yaw
+                #TODO: check if this affects the accuracy
+                if self.r_m2o ==np.Inf :
+                    self.r_m2o = self.rob_yaw_odom - self.rob_yaw
                 self.t_m2o[0] = self.odom_costmap0s[0]+(self.odom_costmap_res*self.odom_costmap_rr/2.0) - (np.cos(self.r_m2o)*self.rob_pos[0]-np.sin(self.r_m2o)*self.rob_pos[1])
                 self.t_m2o[1] = self.odom_costmap0s[1]+(self.odom_costmap_res*self.odom_costmap_h/2.0) - (np.sin(self.r_m2o)*self.rob_pos[0]+np.cos(self.r_m2o)*self.rob_pos[1])
+                self.rob_yaw_tracking = self.rob_yaw_odom - self.r_m2o
+                #print 'rob_yaw_tracking = {}'.format(self.rob_yaw_tracking)
+                #print 'rob_ yaw_odom = {}'.format(self.r_m2o)
+                
+                #if (self.rob_yaw_tracking-self.rob_yaw)>0.1 :
+                #    print 'rob_yaw tracking -                            amcl = {}'.format(self.rob_yaw_tracking-self.rob_yaw)
+
             #print 'amcl, odom yaw = {},{}'.format(self.rob_yaw,self.rob_yaw_odom)   
             #plt.cla()
             #plt.axis('equal')
@@ -445,6 +471,29 @@ class SideWalking :
                 #if criteria0 :
                 #    print 'criteria0 fixed'
                 #    print 'rob_pos = {}'.format(self.rob_pos)
+                if len(self.map_costmap)>0 and len(self.ds_map_costmap)==0:
+                    self.ds_size = 10
+                    self.ds_map_costmap0s[0] = self.map_costmap0s[0]+self.map_costmap_res*self.ds_size/2.0
+                    self.ds_map_costmap0s[1] = self.map_costmap0s[1]+self.map_costmap_res*self.ds_size/2.0
+                    self.ds_map_costmap_res = self.map_costmap_res*self.ds_size
+                    patch = []
+                    for i in range(0,self.ds_size) :
+                        patch = patch + range(i*self.map_costmap_rr,i*self.map_costmap_rr+self.ds_size)
+                    
+                    #for i in range(0,len(self.map_costmap)) :
+                    #    if map_costmap[i]>self.collision_thr:
+
+
+                    
+                    for j in range(int(np.floor(self.map_costmap_h/self.ds_size))) :
+                        for i in range(int(np.floor(self.map_costmap_rr/self.ds_size))) :
+                            ds_collision = len([1 for k in patch if self.map_costmap[j*self.ds_size*self.map_costmap_rr+i*self.ds_size+k]>self.collision_thr])
+                            ds_collision = ds_collision*(self.collision_thr+1)
+                            self.ds_map_costmap.append(ds_collision)
+                    
+                    self.ds_map_costmap_rr = int(np.floor(self.map_costmap_rr/self.ds_size))
+
+
 
             	if criteria0 and criteria1 and criteria2:
                     #initialization
@@ -503,7 +552,32 @@ class SideWalking :
 
                     p1_goal = self.p1_goal[1]
                     p2_goal = self.p2_goal[1]
+                    plt.cla()
+                    plt.axis('equal')
+                    x_min = initial_rob_pos[0]-10
+                    x_max = initial_rob_pos[0]+15
+                    y_min = initial_rob_pos[1]-5
+                    y_max = initial_rob_pos[1]
+
+                    plt.xlim((x_min, x_max))
+                    plt.ylim((y_min, y_max))
+                    plt.grid(True)
+                    plt.autoscale(False)          
+
+                    if len(self.map_costmap)>0 :
+                        obstacle = [l for l in range(0,len(self.map_costmap),10) if self.map_costmap[l]>collision_thr]
+                        width = self.map_costmap_rr
+                        my = [int(np.floor(l/width))*self.map_costmap_res+self.map_costmap0s[1] for l in obstacle]
+                        mx = [np.mod(obstacle[k],width)*self.map_costmap_res+self.map_costmap0s[0] for k in range(len(obstacle))]
+                        plt.plot(mx,my,'ok')
+
+                    plt.plot(self.ped_pos[0],self.ped_pos[1],'or')
+                    plt.plot(self.rob_pos[0],self.rob_pos[1],'og')
+                    plt.plot(self.p1_goal[0][0],self.p1_goal[0][1],'*r')
+                    plt.plot(self.p1_goal[1][0],self.p1_goal[1][1],'*g')
                     raw_input('Environment Ready, Press Any Key to Start')
+                    plt.pause(1) 
+
                     self.start = True
                 else :
                     continue
@@ -516,7 +590,6 @@ class SideWalking :
                 ## gazebo
                 #    model_state_result = self.get_model_srv(self.request)
                 if self.rob_yaw!=np.Inf and self.rob_yaw_odom!=np.Inf :
-                    self.r_m2o = self.rob_yaw_odom - self.rob_yaw
                     self.t_m2o[0] = self.odom_costmap0s[0]+(self.odom_costmap_res*self.odom_costmap_rr/2.0) - (np.cos(self.r_m2o)*self.rob_pos[0]-np.sin(self.r_m2o)*self.rob_pos[1])
                     self.t_m2o[1] = self.odom_costmap0s[1]+(self.odom_costmap_res*self.odom_costmap_h/2.0) - (np.sin(self.r_m2o)*self.rob_pos[0]+np.cos(self.r_m2o)*self.rob_pos[1])
                     
@@ -534,7 +607,7 @@ class SideWalking :
                     if rel_dist < 2.5:
                         new_sm = rel_dist
                         self.sm = (1-alpha)*self.sm+alpha*new_sm
-                        self.sm = min(self.sm,1.25)
+                        self.sm = min(self.sm,0.4)
 
                     x1_ = [0,0,0,0]
                     x1_[0] = self.ped_pos[0]+self.ped_vel[0]
@@ -549,7 +622,9 @@ class SideWalking :
                     
                     #print 'velocity = {}{}'.format(x1_[2]/self.v,x1_[3]/self.v)         
 
-                    if np.sqrt(self.ped_vel[0]**2+self.ped_vel[1]**2) > vel_thr:
+                    #if np.sqrt(self.ped_vel[0]**2+self.ped_vel[1]**2) > vel_thr:
+                     
+                    if self.v > vel_thr:
                         #print 'dist = {}'.format(rel_dist)
                         #print 'sm = {}'.format(self.sm)
                         
@@ -589,12 +664,13 @@ class SideWalking :
                             
                             if max(self.theta)<1.0:
                                 #inference update
-                                inference_v = max(self.v,0.5)                               
+                                inference_update = 1
+                                inference_v = max(self.v,0.7)                               
                                 num_i_path_found = 0
                                 for i in range(len(self.theta)) :
                                     p1_goal = self.p1_goal[i]
                                     p2_goal = self.p2_goal[i]
-                                    i_path_found[i], i_trajx[i], i_trajy[i], i_trajx_[i], i_trajy_[i], rob_s_angz, path_fScore, current = FullKnowledgeCollaborativePlanner(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,p1_goal,p2_goal,self.sm,inference_v,self.ww,self.map_costmap,self.map_costmap0s,collision_thr,self.map_costmap_res,self.map_costmap_rr,self.r_m2o,self.t_m2o)
+                                    i_path_found[i], i_trajx[i], i_trajy[i], i_trajx_[i], i_trajy_[i], rob_s_angz, path_fScore, current = FullKnowledgeCollaborativePlanner(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,p1_goal,p2_goal,self.sm,inference_v,self.ww,self.ds_map_costmap,self.ds_map_costmap0s,collision_thr,self.ds_map_costmap_res,self.ds_map_costmap_rr,self.r_m2o,self.t_m2o)
                                     num_i_path_found = num_i_path_found+i_path_found[i]
 
                                 inference_time_del = current_time-initial_inference_time
@@ -604,7 +680,7 @@ class SideWalking :
                                 s = self.theta
                                 obs_s = [np.Inf for i in range(len(self.theta))]
                                 s_new_no = [np.Inf for i in range(len(self.theta))]
-                                inference_update = 1
+                                
                                 
 
                                 if (num_i_path_found>0) and (num_i_path_found<len(self.theta)):
@@ -612,7 +688,7 @@ class SideWalking :
                                     obs_s[i_path_found.index(1)] = 0.9
                                     o = np.dot(s,obs_s)
                                 
-                                elif (len(self.iXtraj[0]) > 0) and (len(self.iXtraj[1]) > 0) and (len(self.iXtraj[0])>=obs_index):
+                                elif (len(self.iXtraj[0]) > 0) and (len(self.iXtraj[1]) > 0) and (len(self.iXtraj[0])>=obs_index) and (len(self.iXtraj[1])>=obs_index):
                                     dist = [np.Inf for i in range(len(self.theta))]                                    
                                     obs = self.ped_pos
 
@@ -625,16 +701,20 @@ class SideWalking :
 
                                     dist = [np.sqrt((self.iXtraj[i][obs_index]-obs[0])**2+(self.iYtraj[i][obs_index]-obs[1])**2) for i in range(len(self.theta))]
                                     obs_s = [np.exp(-dist[i]*self.wd[i]) for i in range(len(self.theta))]
-                                    min_dist1 = dist.index(min(dist))
-                                    if min_dist1==0:
-                                        min_dist2 = 1
-                                    else:
-                                        min_dist2 = 0
-                                        obs_s[min_dist1] = 1-obs_s[min_dist2]
+                                    #TODO: make this among multiple goals
+                                    if abs(dist[0]-dist[1])<0.2 :
+                                        inference_update = 0
+                                    else :
+                                        min_dist1 = dist.index(min(dist))
+                                        if min_dist1==0:
+                                            min_dist2 = 1
+                                        else:
+                                            min_dist2 = 0
+                                            obs_s[min_dist1] = 1-obs_s[min_dist2]
 
-                                    s_new_no = [s[i]*obs_s[i] for i in range(len(self.theta))]
-                                    o = sum(s_new_no)
-                                    #print 'inference dist = {}'.format(dist)
+                                        s_new_no = [s[i]*obs_s[i] for i in range(len(self.theta))]
+                                        o = sum(s_new_no)
+                                        #print 'inference dist = {}'.format(dist)
                                 else:
                                     inference_update = 0
 
@@ -666,12 +746,12 @@ class SideWalking :
 
                         if not rob_intersection_reached :
                             agentID=1
-                            #print 'default planner called'
+                            print 'default planner called'
                             goal_ind = 0
                             p1_goal = self.p1_goal[goal_ind]
                             p2_goal = self.p2_goal[goal_ind]
                             stime = time.time()
-                            robot_path_found, pathx_, pathy_, xtraj, ytraj, rob_s_angz, path_fScore, current = FullKnowledgeCollaborativePlanner(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,p1_goal,p2_goal,self.sm,self.v,self.ww,self.map_costmap,self.map_costmap0s,collision_thr,self.map_costmap_res,self.map_costmap_rr,self.r_m2o,self.t_m2o)
+                            robot_path_found, pathx_, pathy_, xtraj, ytraj, rob_s_angz, path_fScore, current = FullKnowledgeCollaborativePlanner(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,p1_goal,p2_goal,self.sm,self.v,self.ww,self.ds_map_costmap,self.ds_map_costmap0s,collision_thr,self.ds_map_costmap_res,self.ds_map_costmap_rr,self.r_m2o,self.t_m2o)
                             time_del = time.time()-stime
                             #print 'full- planner computation time = {}'.format(time_del)
                             #self.Xtraj = np.copy(pathx_)
@@ -698,14 +778,14 @@ class SideWalking :
 
                             if self.planner=='Full' :
                                 agentID=1
-                                #print 'full planner called'
+                                print 'full planner called'
                                 ##p1_goal = self.ped_pos
                                 ##p2_goal = self.ped_pos
                                 goal_ind = self.theta.index(max(self.theta))
                                 p1_goal = self.p1_goal[goal_ind]
                                 p2_goal = self.p2_goal[goal_ind]
                                 stime = time.time()
-                                robot_path_found, pathx_, pathy_, xtraj, ytraj, rob_s_angz, path_fScore, current = FullKnowledgeCollaborativePlanner(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,p1_goal,p2_goal,self.sm,self.v,self.ww,self.map_costmap,self.map_costmap0s,collision_thr,self.map_costmap_res,self.map_costmap_rr,self.r_m2o,self.t_m2o)
+                                robot_path_found, pathx_, pathy_, xtraj, ytraj, rob_s_angz, path_fScore, current = FullKnowledgeCollaborativePlanner(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,p1_goal,p2_goal,self.sm,self.v,self.ww,self.ds_map_costmap,self.ds_map_costmap0s,collision_thr,self.ds_map_costmap_res,self.ds_map_costmap_rr,self.r_m2o,self.t_m2o)
                                 time_del = time.time()-stime
                                 #print 'full- planner computation time = {}'.format(time_del)
                                 
@@ -713,7 +793,7 @@ class SideWalking :
                                 agentID=2
                                 #print 'pomdp called'
                                 stime = time.time()
-                                robot_path_found, xtraj, ytraj, pathx_, pathy_, rob_s_angz, path_fScore, current = PomdpFollower(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,self.theta,self.view_thr,self.prob_thr,self.p1_goal,self.p2_goal,self.sm,self.v,self.ww,self.wc,self.wd,self.map_costmap,self.map_costmap0s,collision_thr,self.map_costmap_res,self.map_costmap_rr,self.r_m2o,self.t_m2o,self.wh)
+                                robot_path_found, xtraj, ytraj, pathx_, pathy_, rob_s_angz, path_fScore, current = PomdpFollower(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,self.theta,self.view_thr,self.prob_thr,self.p1_goal,self.p2_goal,self.sm,self.v,self.ww,self.wc,self.wd,self.ds_map_costmap,self.ds_map_costmap0s,collision_thr,self.ds_map_costmap_res,self.ds_map_costmap_rr,self.r_m2o,self.t_m2o,self.wh)
                                 time_del = time.time()-stime
                                 print 'pomdp computation time = {}'.format(time_del)
                                 
@@ -738,11 +818,23 @@ class SideWalking :
 
                 traj_index = int(np.ceil(robot_time_del_plan/self.dt))
                 if len(self.Xtraj)>traj_index:
+                    
+                    #print 'x_pos_ref now and previous = {} {}'.format(self.x_pos_ref,self.Xtraj[traj_index-1])
+                    #print 'y_pos_ref now and previous = {} {}'.format(self.y_pos_ref,self.Ytraj[traj_index-1])
+                    if traj_index>0 :
+                        self.x_vel_ref = (self.Xtraj[traj_index] - self.Xtraj[traj_index-1])/self.dt
+                        self.y_vel_ref = (self.Ytraj[traj_index] - self.Ytraj[traj_index-1])/self.dt
+                    
+
                     self.x_pos_ref = np.copy(self.Xtraj[traj_index])
                     self.y_pos_ref = np.copy(self.Ytraj[traj_index])
-                    self.x_vel_ref = (self.x_pos_ref - self.Xtraj[traj_index-1])/self.dt
-                    self.y_vel_ref = (self.y_pos_ref - self.Xtraj[traj_index-1])/self.dt
-                    
+
+                    if abs(self.x_vel_ref)>2 or abs(self.y_vel_ref)>2:
+                        print 'x_y vel_ref  = {} {}'.format(self.x_vel_ref,self.y_vel_ref)
+                        print 'Xtraj = {}'.format(self.Xtraj)
+                        print 'Ytraj = {}'.format(self.Ytraj)
+                        print 'bad index = {}'.format(traj_index)
+
                 else:
                     print 'INDEX exceeds trajectory output, x_vel_ref = {}'.format(self.x_vel_ref)
                     self.x_pos_ref = self.rob_pos[0]+self.x_vel_ref*self.dt
@@ -752,28 +844,33 @@ class SideWalking :
                 
         
                 ss_error = 1.2
-                max_vel = 0.2
+                max_vel = 0.4
                 vel_x = ss_error*(self.x_vel_ref*m.cos(self.rob_yaw) + self.y_vel_ref*m.sin(self.rob_yaw))
                 vel_y = ss_error*(-self.x_vel_ref*m.sin(self.rob_yaw) + self.y_vel_ref*m.cos(self.rob_yaw))
                 vel_xy = min(max_vel,(np.sqrt(vel_x**2+vel_y**2)))
                 self.vel_msg.linear.x = vel_xy
-                self.vel_msg.linear.x = 0
-                self.vel_msg.linear.y = 0
-                omega = 0.4
+                #self.vel_msg.linear.x = 0
+                #self.vel_msg.linear.y = 0
+                omega = 0.5
                 damping = 1.0
                 v_ref_ = np.sqrt(self.x_vel_ref**2+self.y_vel_ref**2)
                 
                 if v_ref_ > 0.01 :
                     v_ref = [self.x_vel_ref/v_ref_,self.y_vel_ref/v_ref_]
-                    yaw_ref = m.asin(np.cross([1,0],v_ref))
-                    while abs(yaw_ref>m.pi) :
-                        yaw_ref = yaw_ref - np.sign(yaw_ref)*m.pi 
-                    self.vel_msg.angular.z = omega*(yaw_ref-self.rob_yaw) + 2*damping*omega*(0-self.vel_msg.angular.z)
-                            
+                    #print 'v_ref = {}'.format(v_ref)
+                    yaw_ref = m.acos(v_ref[0])
+                    yaw_ref = yaw_ref*np.sign(v_ref[1])
+                    #yaw_ref = m.asin(np.cross([1,0],v_ref))
+                    #while abs(yaw_ref>m.pi) :
+                    #    yaw_ref = yaw_ref - np.sign(yaw_ref)*2.0*m.pi 
+                    self.vel_msg.angular.z = omega*(yaw_ref-self.rob_yaw) + 2*damping*omega*(0-self.rob_angz)
+                    #print 'yaw_ref, self.yaw = {}, {}'.format(yaw_ref,self.rob_yaw)
+                    #print 'rob ang z = {}'.format(self.rob_angz)
+                    #print 'ang vel = {}'.format(self.vel_msg.angular.z)        
 
                 #collision check using online updated costmap 
                 #collision = Check([self.x_pos_ref],[self.y_pos_ref],self.odom_costmap,self.odom_costmap0s,collision_thr,self.odom_costmap_res,self.odom_costmap_rr,self.r_m2o,self.t_m2o) 
-                collision = Check([self.x_pos_ref],[self.y_pos_ref],self.map_costmap,self.map_costmap0s,collision_thr,self.map_costmap_res,self.map_costmap_rr) 
+                collision = Check([self.x_pos_ref],[self.y_pos_ref],self.ds_map_costmap,self.ds_map_costmap0s,collision_thr,self.ds_map_costmap_res,self.ds_map_costmap_rr) 
                                 
 
 
@@ -787,8 +884,8 @@ class SideWalking :
                 #print 'vel_msg = {},{}'.format(self.vel_msg.angular.z,self.vel_msg.linear.x)
                 self.velocity_pub.publish(self.vel_msg)
 
+                        # Plotting starts here (actual code ends here)
 
-    	    # Plotting starts here (actual code ends here)
             plt.cla()
             plt.axis('equal')
             x_min = initial_rob_pos[0]-10
@@ -799,75 +896,50 @@ class SideWalking :
             plt.xlim((x_min, x_max))
             plt.ylim((y_min, y_max))
             plt.grid(True)
-            plt.autoscale(False)
-
-
-
-            #if len(self.odom_costmap)>0 :
-            #    obstacle = [l for l in range(0,len(self.odom_costmap),10) if self.odom_costmap[l]>collision_thr]
-            #    #print 'costmap = {}'.format(self.costmap[0])
-            #    width = self.odom_costmap_rr
-            #   my = [int(np.floor(l/width))*self.odom_costmap_res+self.odom_costmap0s[1] for l in obstacle]
-            #    mx = [np.mod(obstacle[k],width)*self.odom_costmap_res+self.odom_costmap0s[0] for k in range(len(obstacle))]
-            #    #print 'resolution = {}'.format(self.costmap_res)
-            #    #print 'obstacle, mx, my = {},{},{}'.format(obstacle[0],mx[0],my[0])
-            #    plt.plot(mx,my,'ok')
-
-           
+            plt.autoscale(False)          
 
             if len(self.map_costmap)>0 :
                 obstacle = [l for l in range(0,len(self.map_costmap),10) if self.map_costmap[l]>collision_thr]
-                #print 'costmap = {}'.format(self.costmap[0])
                 width = self.map_costmap_rr
                 my = [int(np.floor(l/width))*self.map_costmap_res+self.map_costmap0s[1] for l in obstacle]
                 mx = [np.mod(obstacle[k],width)*self.map_costmap_res+self.map_costmap0s[0] for k in range(len(obstacle))]
-                #print 'resolution = {}'.format(self.costmap_res)
-                #print 'obstacle, mx, my = {},{},{}'.format(obstacle[0],mx[0],my[0])
                 plt.plot(mx,my,'ok')
-            if len(self.Xtraj)>0 :
-                plt.plot(self.Xtraj,self.Ytraj,'*g')
-                #print 'traj length = {}'.format(len(self.Xtraj))
-               # print 'length of path = {}'.format(len(self.Xtraj))
-                plt.plot(human_trajx,human_trajy,'r')
-
 
             plt.plot(self.ped_pos[0],self.ped_pos[1],'or')
             plt.plot(self.rob_pos[0],self.rob_pos[1],'og')
-            #print 'sm = {}'.format(self.sm)
-
-
-            #px, py = Map2Odom([self.ped_pos[0]],[self.ped_pos[1]],self.r_m2o,self.t_m2o)
-            #plt.plot(px,py,'or')
-            #px, py = Map2Odom([self.rob_pos[0]],[self.rob_pos[1]],self.r_m2o,self.t_m2o)
-            #plt.plot(px,py,'og')
-
             plt.plot(self.p1_goal[0][0],self.p1_goal[0][1],'*r')
             plt.plot(self.p1_goal[1][0],self.p1_goal[1][1],'*g')
-            #print 'goal location = {}'.format(self.p1_goal)
+            #if len(self.ds_map_costmap)>0 :
+            #    obstacle = [l for l in range(0,len(self.ds_map_costmap),1) if self.ds_map_costmap[l]>collision_thr]
+            #    width = self.ds_map_costmap_rr
+            #    my = [int(np.floor(l/width))*self.ds_map_costmap_res+self.ds_map_costmap0s[1] for l in obstacle]
+            #    mx = [np.mod(obstacle[k],width)*self.ds_map_costmap_res+self.ds_map_costmap0s[0] for k in range(len(obstacle))]
+            #    plt.plot(mx,my,'ok')
+            
+
+            if len(self.Xtraj)>0 :
+                plt.plot(self.Xtraj,self.Ytraj,'*g')
+                plt.plot(human_trajx,human_trajy,'r')
+
+
 
             if len(self.iXtraj[0])>0:
                 plt.plot(self.iXtraj[0],self.iYtraj[0],'m')
                 plt.plot(self.iXtraj[1],self.iYtraj[1],'m')
+                   
+            plt.pause(0.02) 
 
-                    
 
-            plt.pause(0.02)            
-            #plt.plot(cn_node.human_trajy,cn_node.human_trajy,'*g')
-    	    #plt.plot(self.p1_goal[0],self.p1_goal[1],'ok')
-    	    #plt.plot(self.p2_goal[0],self.p2_goal[1],'om')
-            #print 'self.Xtraj = {}'.format(self.Xtraj)       
 
-                            
 
-              
+   
+             
 
             rate.sleep()
 
 
 if __name__ == '__main__':
     rospy.init_node('side_walking_node')
-    #arg1: helmet id for ped, arg2: chair id for ped_goal
-    #arg3: timing_sm, arg4: safety_sm, arg5: max_accelx (0.4), arg6: max_accely (0.4)
     #side_walking = SideWalking(sim_mode=False, planner='Full',prior=[1,0])
     side_walking = SideWalking(sim_mode=False, planner='Pomdp',prior=[0.5,0.5])
     rospy.spin()
