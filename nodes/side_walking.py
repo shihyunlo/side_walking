@@ -39,7 +39,9 @@ from leg_tracker.msg import PersonArray
 class SideWalking :
     def __init__(self,sim_mode=True,planner='Full',prior=[1,0]):
         self.sim = sim_mode
-        self.planner = planner # Full, Pomdp
+        self.planner = planner # Full, Pomdp, IPomdp
+        if slef.planner == 'IPomdp' :
+            self.goal_ind = 1 #goal known by the robot
         # sim_mode parameter initialization
         self.mapID = 0
         self.subgoal_ind = 1 # to be set, input by arg
@@ -398,8 +400,9 @@ class SideWalking :
                 #print 'rob_yaw_tracking = {}'.format(self.rob_yaw_tracking)
                 #print 'rob_ yaw_odom = {}'.format(self.r_m2o)
                 
-                #if (self.rob_yaw_tracking-self.rob_yaw)>0.1 :
-                #    print 'rob_yaw tracking -                            amcl = {}'.format(self.rob_yaw_tracking-self.rob_yaw)
+                if (self.rob_yaw_tracking-self.rob_yaw)>0.1 :
+            
+                    print 'rob_yaw tracking -                            amcl = {}'.format(self.rob_yaw_tracking-self.rob_yaw)
 
             #print 'amcl, odom yaw = {},{}'.format(self.rob_yaw,self.rob_yaw_odom)   
             #plt.cla()
@@ -796,6 +799,10 @@ class SideWalking :
                                 robot_path_found, xtraj, ytraj, pathx_, pathy_, rob_s_angz, path_fScore, current = PomdpFollower(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,self.theta,self.view_thr,self.prob_thr,self.p1_goal,self.p2_goal,self.sm,self.v,self.ww,self.wc,self.wd,self.ds_map_costmap,self.ds_map_costmap0s,collision_thr,self.ds_map_costmap_res,self.ds_map_costmap_rr,self.r_m2o,self.t_m2o,self.wh)
                                 time_del = time.time()-stime
                                 print 'pomdp computation time = {}'.format(time_del)
+                            elif self.planner== 'IPomdp' :
+                                agentID=2
+                                stime = time.time()
+                                robot_path_found, xtraj, ytraj, pathx_, pathy_, rob_s_angz, path_fScore, current = PomdpLeader(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,self.theta,self.view_thr,self.prob_thr,self.p1_goal,self.p2_goal,self.sm,self.v,self.ww,self.wc,self.wd,self.ds_map_costmap,self.ds_map_costmap0s,collision_thr,self.ds_map_costmap_res,self.ds_map_costmap_rr,self.r_m2o,self.t_m2o,self.wh,self.goal_ind)
                                 
                                 #if robot_path_found:
                             
