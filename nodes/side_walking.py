@@ -40,7 +40,7 @@ class SideWalking :
     def __init__(self,sim_mode=True,planner='Full',prior=[1,0]):
         self.sim = sim_mode
         self.planner = planner # Full, Pomdp, IPomdp
-        if slef.planner == 'IPomdp' :
+        if self.planner == 'IPomdp' :
             self.goal_ind = 1 #goal known by the robot
         # sim_mode parameter initialization
         self.mapID = 0
@@ -85,6 +85,7 @@ class SideWalking :
         self.p2_goal = [[np.Inf,np.Inf]]
         self.p2_goal.append([np.Inf,np.Inf])
         self.intersection = [[np.Inf, np.Inf]]
+        self.goal0 = []
         self.odom_costmap = []
         self.odom_costmap0s = [0,0]
         self.odom_costmap_res = 0.025
@@ -180,7 +181,7 @@ class SideWalking :
         self.obs_pose_update_time = [np.inf, np.inf, np.inf, np.inf, np.inf]
         self.corner_pose = np.full((4,2), np.inf)
 
-        self.velocity_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
+        self.velocity_pub = rospy.Publisher('/lp_cmd_vel', Twist, queue_size=1)
         #self.cmd_state_pub = rospy.Publisher('/cmd_state', Twist, queue_size=1)
         #self.marker_pub = rospy.Publisher('ped_pos', vis_msg.Marker, latch=False, queue_size=1)
         #self.line_seg_pub = rospy.Publisher('path', vis_msg.Marker, latch=False, queue_size=1)
@@ -261,6 +262,8 @@ class SideWalking :
             #self.rob_pos[1] = 14.14
             #self.rob_pos[0] = 19.08
             #self.rob_pos[1] = 14.37
+            self.rob_pos[0] = 34.606
+            self.rob_pos[1] = -50.853
             #if amcl_msg.twist.twist.linear.x < 1.2 and amcl_msg.twist.twist.linear.y < 1.2 :
             #    self.rob_vel[0] = 0.3*self.rob_vel[0] + 0.7*amcl_msg.twist.twist.linear.x
             #    self.rob_vel[1] = 0.3*self.rob_vel[1] + 0.7*amcl_msg.twist.twist.linear.y
@@ -292,7 +295,7 @@ class SideWalking :
             pos = []
             pos.append(person.pose.position.x)
             dist = np.sqrt(pos[0]**2+person.pose.position.y**2)
-            if not np.isnan(person.pose.position.x) and len(pos)>0 and not ped_found and dist <2.5 and person.pose.position.x>0.25:
+            if not np.isnan(person.pose.position.x) and len(pos)>0 and not ped_found and dist <1.5 and person.pose.position.x>0.25:
                 if self.ped_id == np.Inf:
                     self.ped_id = person.id
                     self.ped_rel_pos[0] = person.pose.position.x
@@ -379,6 +382,7 @@ class SideWalking :
 
         rob_intersection_reached = 0
         ped_intersection_reached = 0
+        rob_goal0_reached = 0
 
         i_trajx = [[],[]]
         i_trajy = [[],[]]
@@ -386,13 +390,24 @@ class SideWalking :
         i_trajy_ = [[],[]]
         i_path_found = [0,0]
 
+        rob_yaw_ = np.Inf
+        preloaded_traj = False
+        preloaded_traj_loaded = False
+
+        turning_timing = np.Inf
+        if self.planner == 'IPomdp':
+            turning_timing = 1.8
+        elif self.planner == 'IPomdpBaseline':
+            turning_timing = 3.8
         
 
 
         while (not rospy.is_shutdown()):
+            rob_yaw_update = False
             if self.rob_yaw!=np.Inf and self.rob_yaw_odom!=np.Inf :
+
                 #TODO: check if this affects the accuracy
-                if self.r_m2o ==np.Inf :
+                if self.r_m2o ==np.Inf: 
                     self.r_m2o = self.rob_yaw_odom - self.rob_yaw
                 self.t_m2o[0] = self.odom_costmap0s[0]+(self.odom_costmap_res*self.odom_costmap_rr/2.0) - (np.cos(self.r_m2o)*self.rob_pos[0]-np.sin(self.r_m2o)*self.rob_pos[1])
                 self.t_m2o[1] = self.odom_costmap0s[1]+(self.odom_costmap_res*self.odom_costmap_h/2.0) - (np.sin(self.r_m2o)*self.rob_pos[0]+np.cos(self.r_m2o)*self.rob_pos[1])
@@ -527,24 +542,28 @@ class SideWalking :
                     print 'initial_ped y = {}'.format(initial_ped_pos[1])
                     
 
-                    self.p1_goal[0] = [initial_ped_pos[0]+10,initial_ped_pos[1]+2]
-                    self.p1_goal[1] = [initial_ped_pos[0]+5, initial_ped_pos[1]-5]
-                    self.p2_goal[0] = [initial_ped_pos[0]+10,initial_ped_pos[1]+2]
-                    self.p2_goal[1] = [initial_ped_pos[0]+5, initial_ped_pos[1]-7]
+                    # self.p1_goal[0] = [initial_ped_pos[0]+10,initial_ped_pos[1]+2]
+                    # self.p1_goal[1] = [initial_ped_pos[0]+5, initial_ped_pos[1]-5]
+                    # self.p2_goal[0] = [initial_ped_pos[0]+10,initial_ped_pos[1]+2]
+                    # self.p2_goal[1] = [initial_ped_pos[0]+5, initial_ped_pos[1]-7]
 
 
-                    #for pilot test
-                    self.intersection[0] = [27.05,14.95]
+                    # #for pilot test
+                    # self.intersection[0] = [27.05,14.95]
 
-                    if initial_rob_pos[0]>self.intersection[0][0]:
-                        self.p1_goal[0] = [21.95, 14.49]
-                        self.p2_goal[0] = [21.95, 14.49]
-                    else :
-                        self.p1_goal[0] = [31.76,16.06]
-                        self.p2_goal[0] = [31.76,16.06]
-                    
-                    self.p1_goal[1] = [28.35,10.9]
-                    self.p2_goal[1] = [28.35,10.9]
+                    # if initial_rob_pos[0]>self.intersection[0][0]:
+                    #     self.p1_goal[0] = [21.95, 14.49]
+                    #     self.p2_goal[0] = [21.95, 14.49]
+                    # else :
+                    #     self.p1_goal[0] = [31.76,16.06]
+                    #     self.p2_goal[0] = [31.76,16.06]
+
+
+                    self.p2_goal[0] = [35.782,-55.718]
+                    self.p2_goal[1] = [36.959,-60.777]
+                    goal_dir = [0.2307,-0.973]
+                    # self.p1_goal[1] = [28.35,10.9]
+                    # self.p2_goal[1] = [28.35,10.9]
 
                     
 
@@ -553,7 +572,9 @@ class SideWalking :
                     #self.p2_goal[1] = [28.16,5]
 
 
-                    p1_goal = self.p1_goal[1]
+                    # p1_goal = self.p1_goal[1]
+                    # p2_goal = self.p2_goal[1]
+                    p1_goal = self.p2_goal[1]
                     p2_goal = self.p2_goal[1]
                     plt.cla()
                     plt.axis('equal')
@@ -592,7 +613,11 @@ class SideWalking :
                 #if self.sim :
                 ## gazebo
                 #    model_state_result = self.get_model_srv(self.request)
-                if self.rob_yaw!=np.Inf and self.rob_yaw_odom!=np.Inf :
+                if abs(self.rob_yaw-rob_yaw_)>0.01:
+                    rob_yaw_update = True
+
+                rob_yaw_ = self.rob_yaw
+                if self.rob_yaw!=np.Inf and self.rob_yaw_odom!=np.Inf and rob_yaw_update: #t_m2o only update only once r_m2o updated
                     self.t_m2o[0] = self.odom_costmap0s[0]+(self.odom_costmap_res*self.odom_costmap_rr/2.0) - (np.cos(self.r_m2o)*self.rob_pos[0]-np.sin(self.r_m2o)*self.rob_pos[1])
                     self.t_m2o[1] = self.odom_costmap0s[1]+(self.odom_costmap_res*self.odom_costmap_h/2.0) - (np.sin(self.r_m2o)*self.rob_pos[0]+np.cos(self.r_m2o)*self.rob_pos[1])
                     
@@ -637,138 +662,36 @@ class SideWalking :
 
                         #anticipated intersection
                         inters_now = self.intersection[0]
-
+                        goal0now = self.p2_goal[1]
+                        #print 'goal0now={}'.format(goal0now)
+                        #print 'rob_pos = {}'.format(self.rob_pos)
 
                         #TODO: assuming more than one intersection to reach
-                        rob_intersect_dist = np.sqrt((self.rob_pos[0]-inters_now[0])**2+(self.rob_pos[1]-inters_now[1])**2)
-                        ped_intersect_dist = np.sqrt((self.ped_pos[0]-inters_now[0])**2+(self.ped_pos[1]-inters_now[1])**2)
-
-                        if not rob_intersection_reached and rob_intersect_dist<3.5 :
-                            #print 'intersect distance = {}'.format(rob_intersect_dist)
-                            rob_intersection_reached = 1
+                        rob_goal0_dist = np.sqrt((self.rob_pos[0]-goal0now[0])**2+(self.rob_pos[1]-goal0now[1])**2)
+                        # rob_intersect_dist = np.sqrt((self.rob_pos[0]-inters_now[0])**2+(self.rob_pos[1]-inters_now[1])**2)
+                        # ped_intersect_dist = np.sqrt((self.ped_pos[0]-inters_now[0])**2+(self.ped_pos[1]-inters_now[1])**2)
 
 
-                        if not ped_intersection_reached and ped_intersect_dist<2.5 :
-                            print 'Ped reached intersection, d = {}'.format(ped_intersect_dist)
-                            ped_intersection_reached = 1
-                            initial_inference_time = current_time
-                        
-
-
-                        #inference
-                        if ped_intersection_reached:
-                                                        #traj rollout for inference update
-                            agentID = 1
-                            num_ti = [i for i in range(len(self.theta)) if self.theta[i]>self.prob_thr]
-                            if len(num_ti) <len(self.theta) :
-                                #TO DO: regulate
-                                self.theta = [0,0]
-                                self.theta[num_ti[0]] = 1.0
-                            
-                            if max(self.theta)<1.0:
-                                #inference update
-                                inference_update = 1
-                                inference_v = max(self.v,0.7)                               
-                                num_i_path_found = 0
-                                for i in range(len(self.theta)) :
-                                    p1_goal = self.p1_goal[i]
-                                    p2_goal = self.p2_goal[i]
-                                    i_path_found[i], i_trajx[i], i_trajy[i], i_trajx_[i], i_trajy_[i], rob_s_angz, path_fScore, current = FullKnowledgeCollaborativePlanner(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,p1_goal,p2_goal,self.sm,inference_v,self.ww,self.ds_map_costmap,self.ds_map_costmap0s,collision_thr,self.ds_map_costmap_res,self.ds_map_costmap_rr,self.r_m2o,self.t_m2o)
-                                    num_i_path_found = num_i_path_found+i_path_found[i]
-
-                                inference_time_del = current_time-initial_inference_time
-                                obs_index = int(inference_time_del/self.dt)
-
-                                o = 0.0
-                                s = self.theta
-                                obs_s = [np.Inf for i in range(len(self.theta))]
-                                s_new_no = [np.Inf for i in range(len(self.theta))]
-                                
-                                
-
-                                if (num_i_path_found>0) and (num_i_path_found<len(self.theta)):
-                                    obs_s = [0.1 for i in range(len(s_new_no))]
-                                    obs_s[i_path_found.index(1)] = 0.9
-                                    o = np.dot(s,obs_s)
-                                
-                                elif (len(self.iXtraj[0]) > 0) and (len(self.iXtraj[1]) > 0) and (len(self.iXtraj[0])>=obs_index) and (len(self.iXtraj[1])>=obs_index):
-                                    dist = [np.Inf for i in range(len(self.theta))]                                    
-                                    obs = self.ped_pos
-
-                                    #print 'len iYtraj = {}'.format(len(self.iXtraj[0]))
-
-                                    #print 'len iYtraj = {}'.format(len(self.iXtraj[1]))
-                                    #print 'len iYtraj = {}'.format(len(self.iYtraj[0]))
-
-                                    #print 'len iYtraj = {}'.format(len(self.iYtraj[1]))
-
-                                    dist = [np.sqrt((self.iXtraj[i][obs_index]-obs[0])**2+(self.iYtraj[i][obs_index]-obs[1])**2) for i in range(len(self.theta))]
-                                    obs_s = [np.exp(-dist[i]*self.wd[i]) for i in range(len(self.theta))]
-                                    #TODO: make this among multiple goals
-                                    if abs(dist[0]-dist[1])<0.2 :
-                                        inference_update = 0
-                                    else :
-                                        min_dist1 = dist.index(min(dist))
-                                        if min_dist1==0:
-                                            min_dist2 = 1
-                                        else:
-                                            min_dist2 = 0
-                                            obs_s[min_dist1] = 1-obs_s[min_dist2]
-
-                                        s_new_no = [s[i]*obs_s[i] for i in range(len(self.theta))]
-                                        o = sum(s_new_no)
-                                        #print 'inference dist = {}'.format(dist)
-                                else:
-                                    inference_update = 0
-
-                                if inference_update :
-                                    self.theta = [s_new_no[i]/o for i in range(len(self.theta))]
-                                
-                                    print 'inference obs_s = {}'.format(obs_s)
-                                    #print 'inference obs = {}'.format(s_new_no)
-                                    print 'THETA = {}'.format(self.theta)
-
-                                if num_i_path_found==len(self.theta) :
-                                    self.iXtraj = i_trajx
-                                    self.iYtraj = i_trajy
-                                    initial_inference_time = current_time
-                                    #print 'inference path updated, length = {}'.format(len(self.iXtraj[0]))
+                        if not rob_goal0_reached and rob_goal0_dist<(self.v*turning_timing+0.1) :
+                            rob_goal0_reached = 1
 
 
 
-
-                                
-
-
-
-
-
-                             
-
-
-
-                        if not rob_intersection_reached :
+                        if not rob_goal0_reached or self.planner=='Test':
+                            #to walk together with a constant speed.. TODODO: goal direction?
                             agentID=1
                             print 'default planner called'
-                            goal_ind = 0
+                            goal_ind = 1
                             p1_goal = self.p1_goal[goal_ind]
                             p2_goal = self.p2_goal[goal_ind]
                             stime = time.time()
                             robot_path_found, pathx_, pathy_, xtraj, ytraj, rob_s_angz, path_fScore, current = FullKnowledgeCollaborativePlanner(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,p1_goal,p2_goal,self.sm,self.v,self.ww,self.ds_map_costmap,self.ds_map_costmap0s,collision_thr,self.ds_map_costmap_res,self.ds_map_costmap_rr,self.r_m2o,self.t_m2o)
                             time_del = time.time()-stime
-                            #print 'full- planner computation time = {}'.format(time_del)
-                            #self.Xtraj = np.copy(pathx_)
-                            #self.Ytraj = np.copy(pathy_)
-                            #human_trajx = xtraj
-                            #human_trajy = ytraj
-                            #print 'full traj length = {}'.format(len(pathx_))
-                            #print 'full traj length = {}'.format(len(xtraj))
 
-
-                            #agentID=2
+                            agentID=2
                             #print 'pomdp called'
                             #stime = time.time()
-                            #robot_path_found, xtraj, ytraj, pathx_, pathy_, rob_s_angz, path_fScore, current = PomdpFollower(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,self.theta,self.view_thr,self.prob_thr,self.p1_goal,self.p2_goal,self.sm,self.v,self.ww,self.wc,self.wd,self.map_costmap,self.map_costmap0s,collision_thr,self.map_costmap_res,self.map_costmap_rr,self.r_m2o,self.t_m2o,self.wh)
+                            robot_path_found, xtraj, ytraj, pathx_, pathy_, rob_s_angz, path_fScore, current = PomdpFollower(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,[0,1.0],self.view_thr,self.prob_thr,self.p1_goal,self.p2_goal,self.sm,self.v,self.ww,self.wc,self.wd,self.map_costmap,self.map_costmap0s,collision_thr,self.map_costmap_res,self.map_costmap_rr,self.r_m2o,self.t_m2o,self.wh)
                             #time_del = time.time()-stime
                             #print 'pomdp computation time = {}'.format(time_del)
                             #self.Xtraj = xtraj
@@ -778,36 +701,76 @@ class SideWalking :
                             #print 'pomdp traj length = {}'.format(len(xtraj))
                             #print 'pomdp traj length = {}'.format(len(pathx_))
                         else :
+                            if self.planner == 'IPomdpBaseline' :
+                                #TODODO: goal direction?
+                                if not preloaded_traj_loaded:
+                                    robot_path_found,xtraj,ytraj = IPomdpBaslineTraj(x2_,self.v,goal_dir)
+                                    robot_path_found = 1
+                                    preloaded_traj_loaded = 1
+                                else:
+                                    robot_path_found = False
 
-                            if self.planner=='Full' :
-                                agentID=1
-                                print 'full planner called'
-                                ##p1_goal = self.ped_pos
-                                ##p2_goal = self.ped_pos
-                                goal_ind = self.theta.index(max(self.theta))
-                                p1_goal = self.p1_goal[goal_ind]
-                                p2_goal = self.p2_goal[goal_ind]
-                                stime = time.time()
-                                robot_path_found, pathx_, pathy_, xtraj, ytraj, rob_s_angz, path_fScore, current = FullKnowledgeCollaborativePlanner(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,p1_goal,p2_goal,self.sm,self.v,self.ww,self.ds_map_costmap,self.ds_map_costmap0s,collision_thr,self.ds_map_costmap_res,self.ds_map_costmap_rr,self.r_m2o,self.t_m2o)
-                                time_del = time.time()-stime
-                                #print 'full- planner computation time = {}'.format(time_del)
+                                preloaded_traj = True
+
+
+                            # if self.planner=='Full' :
+                            #     agentID=1
+                            #     print 'full planner called'
+                            #     ##p1_goal = self.ped_pos
+                            #     ##p2_goal = self.ped_pos
+                            #     goal_ind = self.theta.index(max(self.theta))
+                            #     p1_goal = self.p1_goal[goal_ind]
+                            #     p2_goal = self.p2_goal[goal_ind]
+                            #     stime = time.time()
+                            #     robot_path_found, pathx_, pathy_, xtraj, ytraj, rob_s_angz, path_fScore, current = FullKnowledgeCollaborativePlanner(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,p1_goal,p2_goal,self.sm,self.v,self.ww,self.ds_map_costmap,self.ds_map_costmap0s,collision_thr,self.ds_map_costmap_res,self.ds_map_costmap_rr,self.r_m2o,self.t_m2o)
+                            #     time_del = time.time()-stime
+                            #     #print 'full- planner computation time = {}'.format(time_del)
                                 
-                            elif self.planner== 'Pomdp' :
-                                agentID=2
-                                #print 'pomdp called'
-                                stime = time.time()
-                                robot_path_found, xtraj, ytraj, pathx_, pathy_, rob_s_angz, path_fScore, current = PomdpFollower(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,self.theta,self.view_thr,self.prob_thr,self.p1_goal,self.p2_goal,self.sm,self.v,self.ww,self.wc,self.wd,self.ds_map_costmap,self.ds_map_costmap0s,collision_thr,self.ds_map_costmap_res,self.ds_map_costmap_rr,self.r_m2o,self.t_m2o,self.wh)
-                                time_del = time.time()-stime
-                                print 'pomdp computation time = {}'.format(time_del)
+                            # elif self.planner== 'Pomdp' :
+                            #     agentID=2
+                            #     #print 'pomdp called'
+                            #     stime = time.time()
+                            #     robot_path_found, xtraj, ytraj, pathx_, pathy_, rob_s_angz, path_fScore, current = PomdpFollower(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,self.theta,self.view_thr,self.prob_thr,self.p1_goal,self.p2_goal,self.sm,self.v,self.ww,self.wc,self.wd,self.ds_map_costmap,self.ds_map_costmap0s,collision_thr,self.ds_map_costmap_res,self.ds_map_costmap_rr,self.r_m2o,self.t_m2o,self.wh)
+                            #     time_del = time.time()-stime
+                            #     print 'pomdp computation time = {}'.format(time_del)
                             elif self.planner== 'IPomdp' :
-                                agentID=2
-                                stime = time.time()
-                                robot_path_found, xtraj, ytraj, pathx_, pathy_, rob_s_angz, path_fScore, current = PomdpLeader(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,self.theta,self.view_thr,self.prob_thr,self.p1_goal,self.p2_goal,self.sm,self.v,self.ww,self.wc,self.wd,self.ds_map_costmap,self.ds_map_costmap0s,collision_thr,self.ds_map_costmap_res,self.ds_map_costmap_rr,self.r_m2o,self.t_m2o,self.wh,self.goal_ind)
+                                #TODODO: goal direction?
+                                if not preloaded_traj_loaded :
+                                    robot_path_found, xtraj, ytraj = IPomdpTraj(x2_,self.v,goal_dir)
+                                    robot_path_found = 1
+                                    preloaded_traj_loaded = 1
+                                else :
+                                    robot_path_found = False
+
+                                preloaded_traj = True
+                                #robot_path_found, xtraj, ytraj, pathx_, pathy_, rob_s_angz, path_fScore, current = PomdpLeader(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,self.theta,self.view_thr,self.prob_thr,self.p1_goal,self.p2_goal,self.sm,self.v,self.ww,self.wc,self.wd,self.ds_map_costmap,self.ds_map_costmap0s,collision_thr,self.ds_map_costmap_res,self.ds_map_costmap_rr,self.r_m2o,self.t_m2o,self.wh,self.goal_ind)
                                 
                                 #if robot_path_found:
                             
                                 #else :
                                 #    print 'pomdp plan not found'
+
+
+
+
+
+                        if preloaded_traj_loaded and (robot_time_del_plan > (self.rob_traj_duration*(turning_timing+0.2))):
+                            #go back to call the default planner#TODODO: goal location
+                            agentID=1
+                            print 'default planner called'
+                            goal_ind = 1
+                            p1_goal = self.p1_goal[goal_ind]
+                            p2_goal = self.p2_goal[goal_ind]
+                            stime = time.time()
+                            robot_path_found, pathx_, pathy_, xtraj, ytraj, rob_s_angz, path_fScore, current = FullKnowledgeCollaborativePlanner(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,p1_goal,p2_goal,self.sm,self.v,self.ww,self.ds_map_costmap,self.ds_map_costmap0s,collision_thr,self.ds_map_costmap_res,self.ds_map_costmap_rr,self.r_m2o,self.t_m2o)
+                            time_del = time.time()-stime
+                            agentID=2
+                            #print 'pomdp called'
+                            #stime = time.time()
+                            robot_path_found, xtraj, ytraj, pathx_, pathy_, rob_s_angz, path_fScore, current = PomdpFollower(x1_,x2_,self.dt,rob_traj_duration,self.weight,agentID,self.H,[0,1.0],self.view_thr,self.prob_thr,self.p1_goal,self.p2_goal,self.sm,self.v,self.ww,self.wc,self.wd,self.map_costmap,self.map_costmap0s,collision_thr,self.map_costmap_res,self.map_costmap_rr,self.r_m2o,self.t_m2o,self.wh)
+                            
+
+
 
                         if robot_path_found :
                             self.Xtraj = xtraj
@@ -822,6 +785,10 @@ class SideWalking :
                             #print 'traj generated = {}'.format(pathx_)
                         else :
                             robot_time_del_plan = time.time()-initial_time
+
+
+
+                            
 
                 traj_index = int(np.ceil(robot_time_del_plan/self.dt))
                 if len(self.Xtraj)>traj_index:
@@ -948,5 +915,5 @@ class SideWalking :
 if __name__ == '__main__':
     rospy.init_node('side_walking_node')
     #side_walking = SideWalking(sim_mode=False, planner='Full',prior=[1,0])
-    side_walking = SideWalking(sim_mode=False, planner='Pomdp',prior=[0.5,0.5])
+    side_walking = SideWalking(sim_mode=False, planner='IPomdp',prior=[0.5,0.5])
     rospy.spin()

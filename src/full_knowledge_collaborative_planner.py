@@ -82,6 +82,9 @@ def FullKnowledgeCollaborativePlanner(x1,x2,dt,traj_duration,weight,agentID,H,p1
             break
         #print 'openSet = {}'.format(openSet)
         #print 'fScore = {}'.format(fScore)
+        print 'openSet = {}'.format(openSet)
+        print 'current_node_id = {}'.format(current_node_id)
+        
         openSet.pop(openSet.index(current_node_id))
         closeSet.append(current_node_id)
 

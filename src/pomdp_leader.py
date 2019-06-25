@@ -10,6 +10,108 @@ from reconstruct_path_from_node import ReconstructPathFromNode
 from nodes import Nodes
 from check import Check
 from obs_likelihood import ObsLikelihood
+def IPomdpTraj(x,v,goal_dir,dt):
+    pathx = []
+    pathy = []
+    pos = [x[0],x[1]]
+    t = np.dot(range(0,10),dt)
+    ang_del = 37.5/360*np.pi
+
+    #rotate, for segment 1
+    vTx = goal_dir[0]
+    vTy = goal_dir[1]
+    velx = np.dot(vTx,np.cos(np.dot(t,ang_accel))) + np.dot(vTy,np.sin(np.dot(t,ang_accel)))
+    vely = -np.dot(vTx,np.sin(np.dot(t,ang_accel))) + np.dot(vTy,np.cos(np.dot(t,ang_accel)))
+    for j in range(0,len(t)):
+        pos[0] = pos[0] + velx[j]*dt + (v-1.0)*goal_dir[0]*j*dt
+        pos[1] = pos[1] + vely[j]*dt + (v-1.0)*goal_dir[1]*j*dt
+        pathx.append(pos[0])
+        pathy.append(pos[1])
+
+    #rotate, for segment 2
+    for j in range(0,len(t)):
+        pos[0] = pos[0] + velx[-1-j]*dt + (v-1.0)*goal_dir[0]*dt
+        pos[1] = pos[1] + vely[-1-j]*dt + (v-1.0)*goal_dir[1]*dt
+        pathx.append(pos[0])
+        pathy.append(pos[1])
+
+    for j in range(0,len(t)):
+        pos[0] = pos[0] + goal_dir[0]*v*dt
+        pos[1] = pos[1] + goal_dir[1]*v*dt
+        pathx.append(pos[0])
+        pathy.append(pos[1])
+
+
+    path_found = True
+    return path_found, pathx, pathy
+
+def IPomdpBaselineTraj(x,v,goal_dir):
+    pathx = []
+    pathy = []
+    pos = [x[0],x[1]]
+    t = np.dot(range(0,10),dt)
+    ang_del = 37.5/360*np.pi
+
+    #rotate, for segment 1
+    vTx = goal_dir[0]
+    vTy = goal_dir[1]
+    velx = np.dot(vTx,np.cos(np.dot(t,ang_accel))) + np.dot(vTy,np.sin(np.dot(t,ang_accel)))
+    vely = -np.dot(vTx,np.sin(np.dot(t,ang_accel))) + np.dot(vTy,np.cos(np.dot(t,ang_accel)))
+    for j in range(0,len(t)):
+        pos[0] = pos[0] + velx[j]*dt + (v-1.0)*goal_dir[0]*j*dt
+        pos[1] = pos[1] + vely[j]*dt + (v-1.0)*goal_dir[1]*j*dt
+        pathx.append(pos[0])
+        pathy.append(pos[1])
+
+    # rotate, segment 2
+    vTx = velx[-1]
+    vTy = vely[-1]
+    velx = np.dot(vTx,np.cos(np.dot(t,ang_accel))) + np.dot(vTy,np.sin(np.dot(t,ang_accel)))
+    vely = -np.dot(vTx,np.sin(np.dot(t,ang_accel))) + np.dot(vTy,np.cos(np.dot(t,ang_accel)))
+    for j in range(0,len(t)):
+        pos[0] = pos[0] + velx[j]*dt + (v-1.0)*goal_dir[0]*j*dt
+        pos[1] = pos[1] + vely[j]*dt + (v-1.0)*goal_dir[1]*j*dt
+        pathx.append(pos[0])
+        pathy.append(pos[1])
+
+    #rotate, segment 3
+    vTx = velx[-1]
+    vTy = vely[-1]
+    ang_accel = -ang_accel
+    velx = np.dot(vTx,np.cos(np.dot(t,ang_accel))) + np.dot(vTy,np.sin(np.dot(t,ang_accel)))
+    vely = -np.dot(vTx,np.sin(np.dot(t,ang_accel))) + np.dot(vTy,np.cos(np.dot(t,ang_accel)))
+    for j in range(0,len(t)):
+        pos[0] = pos[0] + velx[j]*dt + (v-1.0)*goal_dir[0]*j*dt
+        pos[1] = pos[1] + vely[j]*dt + (v-1.0)*goal_dir[1]*j*dt
+        pathx.append(pos[0])
+        pathy.append(pos[1])
+
+    #rotate, segment 4
+    vTx = velx[-1]
+    vTy = vely[-1]
+    velx = np.dot(vTx,np.cos(np.dot(t,ang_accel))) + np.dot(vTy,np.sin(np.dot(t,ang_accel)))
+    vely = -np.dot(vTx,np.sin(np.dot(t,ang_accel))) + np.dot(vTy,np.cos(np.dot(t,ang_accel)))
+    for j in range(0,len(t)):
+        pos[0] = pos[0] + velx[j]*dt + (v-1.0)*goal_dir[0]*j*dt
+        pos[1] = pos[1] + vely[j]*dt + (v-1.0)*goal_dir[1]*j*dt
+        pathx.append(pos[0])
+        pathy.append(pos[1])
+
+    #rotate, segment 5
+    vTx = velx[-1]
+    vTy = vely[-1]
+    velx = np.dot(vTx,np.cos(np.dot(t,ang_accel))) + np.dot(vTy,np.sin(np.dot(t,ang_accel)))
+    vely = -np.dot(vTx,np.sin(np.dot(t,ang_accel))) + np.dot(vTy,np.cos(np.dot(t,ang_accel)))
+    for j in range(0,len(t)):
+        pos[0] = pos[0] + velx[j]*dt + (v-1.0)*goal_dir[0]*j*dt
+        pos[1] = pos[1] + vely[j]*dt + (v-1.0)*goal_dir[1]*j*dt
+        pathx.append(pos[0])
+        pathy.append(pos[1])
+
+
+    path_found = True
+    return path_found, pathx, pathy
+
 def PartnerCollisionCheck(traj1,traj2,thr1,thr2) :
 #traj1 may contain several segments
   traj1x = traj1[0] #human
